@@ -190,6 +190,50 @@ section h3 {
   justify-content: center;
 }
 
+/* Social Share Buttons */
+.share-buttons {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+  margin-top: 10px;
+}
+
+.share-buttons .share-label {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  align-self: center;
+  white-space: nowrap;
+}
+
+.share-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: #fff;
+  text-decoration: none;
+  transition: opacity 0.2s, transform 0.1s;
+  flex-shrink: 0;
+}
+
+.share-btn:hover {
+  opacity: 0.85;
+  transform: scale(1.1);
+}
+
+.share-btn.share-twitter  { background-color: #000; }
+.share-btn.share-facebook { background-color: #1877f2; }
+.share-btn.share-whatsapp { background-color: #25d366; }
+.share-btn.share-copy     { background-color: var(--primary); }
+
 /* Activity Tag */
 .activity-tag {
   position: absolute;
