@@ -15,6 +15,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const dayFilters = document.querySelectorAll(".day-filter");
   const timeFilters = document.querySelectorAll(".time-filter");
 
+  // View toggle elements
+  const cardViewBtn = document.getElementById("card-view-btn");
+  const calendarViewBtn = document.getElementById("calendar-view-btn");
+
   // Authentication elements
   const loginButton = document.getElementById("login-button");
   const userInfo = document.getElementById("user-info");
@@ -40,6 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let searchQuery = "";
   let currentDay = "";
   let currentTimeRange = "";
+  let currentView = "card";
 
   // Authentication state
   let currentUser = null;
@@ -239,6 +244,25 @@ document.addEventListener("DOMContentLoaded", () => {
   logoutButton.addEventListener("click", logout);
   closeLoginModal.addEventListener("click", closeLoginModalHandler);
 
+  // View toggle event listeners
+  cardViewBtn.addEventListener("click", () => {
+    currentView = "card";
+    cardViewBtn.classList.add("active");
+    cardViewBtn.setAttribute("aria-pressed", "true");
+    calendarViewBtn.classList.remove("active");
+    calendarViewBtn.setAttribute("aria-pressed", "false");
+    displayFilteredActivities();
+  });
+
+  calendarViewBtn.addEventListener("click", () => {
+    currentView = "calendar";
+    calendarViewBtn.classList.add("active");
+    calendarViewBtn.setAttribute("aria-pressed", "true");
+    cardViewBtn.classList.remove("active");
+    cardViewBtn.setAttribute("aria-pressed", "false");
+    displayFilteredActivities();
+  });
+
   // Close login modal when clicking outside
   window.addEventListener("click", (event) => {
     if (event.target === loginModal) {
@@ -256,6 +280,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Show loading skeletons
   function showLoadingSkeletons() {
+    activitiesList.classList.remove("calendar-mode");
     activitiesList.innerHTML = "";
 
     // Create more skeleton cards to fill the screen since they're smaller now
@@ -457,6 +482,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     // Check if there are any results
     if (Object.keys(filteredActivities).length === 0) {
+      activitiesList.classList.remove("calendar-mode");
       activitiesList.innerHTML = `
         <div class="no-results">
           <h4>No activities found</h4>
@@ -466,10 +492,221 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // Display filtered activities
-    Object.entries(filteredActivities).forEach(([name, details]) => {
-      renderActivityCard(name, details);
+    // Display filtered activities in the selected view
+    if (currentView === "calendar") {
+      activitiesList.classList.add("calendar-mode");
+      renderCalendarView(filteredActivities);
+    } else {
+      activitiesList.classList.remove("calendar-mode");
+      Object.entries(filteredActivities).forEach(([name, details]) => {
+        renderActivityCard(name, details);
+      });
+    }
+  }
+
+  // Helper: convert "HH:MM" to total minutes
+  function timeToMinutes(time) {
+    const [h, m] = time.split(":").map(Number);
+    return h * 60 + m;
+  }
+
+  // Lay out activities for one day, assigning column positions for overlaps.
+  // Returns an array of activity objects with added: col, totalCols.
+  function layoutDayActivities(activities) {
+    if (!activities.length) return [];
+
+    const sorted = [...activities].sort(
+      (a, b) => timeToMinutes(a.start_time) - timeToMinutes(b.start_time)
+    );
+
+    // Group into clusters: activities that overlap with at least one neighbor
+    const clusters = [];
+    let cluster = [sorted[0]];
+    let clusterEnd = timeToMinutes(sorted[0].end_time);
+
+    for (let i = 1; i < sorted.length; i++) {
+      const start = timeToMinutes(sorted[i].start_time);
+      const end = timeToMinutes(sorted[i].end_time);
+      if (start < clusterEnd) {
+        cluster.push(sorted[i]);
+        clusterEnd = Math.max(clusterEnd, end);
+      } else {
+        clusters.push(cluster);
+        cluster = [sorted[i]];
+        clusterEnd = end;
+      }
+    }
+    clusters.push(cluster);
+
+    // Within each cluster, assign columns with a greedy algorithm
+    const result = [];
+    clusters.forEach((clusterItems) => {
+      const colEndTimes = [];
+      const positioned = clusterItems.map((activity) => {
+        const start = timeToMinutes(activity.start_time);
+        const end = timeToMinutes(activity.end_time);
+        let col = colEndTimes.findIndex((e) => e <= start);
+        if (col === -1) {
+          col = colEndTimes.length;
+          colEndTimes.push(end);
+        } else {
+          colEndTimes[col] = end;
+        }
+        return { ...activity, col };
+      });
+      const totalCols = colEndTimes.length;
+      positioned.forEach((a) => result.push({ ...a, totalCols }));
     });
+
+    return result;
+  }
+
+  // Render the full weekly calendar view
+  function renderCalendarView(activities) {
+    const DAYS = [
+      "Sunday",
+      "Monday",
+      "Tuesday",
+      "Wednesday",
+      "Thursday",
+      "Friday",
+      "Saturday",
+    ];
+    const CALENDAR_START = 6 * 60; // 6:00 AM in minutes
+    const CALENDAR_END = 19 * 60; // 7:00 PM in minutes
+    const PX_PER_MIN = 1; // 1px per minute → 60px per hour
+    const TOTAL_HEIGHT = (CALENDAR_END - CALENDAR_START) * PX_PER_MIN;
+    // Tooltip flips to the left for Friday (index 5) and Saturday (index 6) to avoid overflow
+    const TOOLTIP_FLIP_DAY_INDEX = 5;
+
+    // Group activity data by day
+    const byDay = {};
+    DAYS.forEach((d) => {
+      byDay[d] = [];
+    });
+
+    Object.entries(activities).forEach(([name, details]) => {
+      if (!details.schedule_details) return;
+      const { days, start_time, end_time } = details.schedule_details;
+      const type = getActivityType(name, details.description);
+      const typeInfo = activityTypes[type];
+      days.forEach((day) => {
+        if (DAYS.includes(day)) {
+          byDay[day].push({ name, details, start_time, end_time, typeInfo });
+        }
+      });
+    });
+
+    // Build calendar DOM
+    const calView = document.createElement("div");
+    calView.className = "calendar-view";
+
+    // Header row
+    const header = document.createElement("div");
+    header.className = "calendar-header";
+    const gutterHeader = document.createElement("div");
+    gutterHeader.className = "calendar-gutter";
+    header.appendChild(gutterHeader);
+    DAYS.forEach((day) => {
+      const cell = document.createElement("div");
+      cell.className = "calendar-day-header";
+      cell.textContent = day.slice(0, 3);
+      header.appendChild(cell);
+    });
+    calView.appendChild(header);
+
+    // Body row
+    const body = document.createElement("div");
+    body.className = "calendar-body";
+
+    // Time gutter
+    const timeGutter = document.createElement("div");
+    timeGutter.className = "calendar-gutter calendar-time-gutter";
+    for (let h = CALENDAR_START / 60; h <= CALENDAR_END / 60; h++) {
+      const label = document.createElement("div");
+      label.className = "calendar-time-label";
+      label.style.height = `${60 * PX_PER_MIN}px`;
+      const period = h >= 12 ? "PM" : "AM";
+      const displayH = h === 12 ? 12 : h > 12 ? h - 12 : h;
+      label.textContent = `${displayH}:00 ${period}`;
+      timeGutter.appendChild(label);
+    }
+    body.appendChild(timeGutter);
+
+    // Day columns
+    DAYS.forEach((day, dayIndex) => {
+      const dayCol = document.createElement("div");
+      dayCol.className = "calendar-day-col";
+      dayCol.style.height = `${TOTAL_HEIGHT}px`;
+
+      // Hour grid lines
+      const numHours = (CALENDAR_END - CALENDAR_START) / 60;
+      for (let h = 0; h <= numHours; h++) {
+        const line = document.createElement("div");
+        line.className = "calendar-hour-line";
+        line.style.top = `${h * 60 * PX_PER_MIN}px`;
+        dayCol.appendChild(line);
+      }
+
+      // Position activities for this day
+      const positioned = layoutDayActivities(byDay[day]);
+      positioned.forEach((item) => {
+        const startMin = timeToMinutes(item.start_time);
+        const endMin = timeToMinutes(item.end_time);
+
+        // Clamp to visible range
+        const visibleStart = Math.max(startMin, CALENDAR_START);
+        const visibleEnd = Math.min(endMin, CALENDAR_END);
+        if (visibleStart >= visibleEnd) return;
+
+        const top = (visibleStart - CALENDAR_START) * PX_PER_MIN;
+        const height = Math.max(
+          (visibleEnd - visibleStart) * PX_PER_MIN,
+          24
+        );
+        const leftPct = (item.col / item.totalCols) * 100;
+        const widthPct = (1 / item.totalCols) * 100;
+
+        const takenSpots = item.details.participants.length;
+        const totalSpots = item.details.max_participants;
+        const spotsLeft = totalSpots - takenSpots;
+
+        // Flip tooltip to the left for the last 2 day columns (Friday, Saturday)
+        const tooltipClass =
+          dayIndex >= TOOLTIP_FLIP_DAY_INDEX
+            ? "calendar-event-tooltip tooltip-left"
+            : "calendar-event-tooltip";
+
+        const event = document.createElement("div");
+        event.className = "calendar-event";
+        event.style.top = `${top}px`;
+        event.style.height = `${height}px`;
+        event.style.left = `calc(${leftPct}% + 2px)`;
+        event.style.width = `calc(${widthPct}% - 4px)`;
+        event.style.backgroundColor = item.typeInfo.color;
+        event.style.borderLeftColor = item.typeInfo.textColor;
+        event.style.color = item.typeInfo.textColor;
+
+        event.innerHTML = `
+          <div class="calendar-event-title">${item.name}</div>
+          <div class="calendar-event-enrollment">${takenSpots}/${totalSpots} enrolled</div>
+          <div class="${tooltipClass}">
+            <strong>${item.name}</strong>
+            <div>${item.details.description}</div>
+            <div style="margin-top:4px"><em>${formatSchedule(item.details)}</em></div>
+            <div style="margin-top:4px">${takenSpots} enrolled &middot; ${spotsLeft} spots left</div>
+          </div>
+        `;
+
+        dayCol.appendChild(event);
+      });
+
+      body.appendChild(dayCol);
+    });
+
+    calView.appendChild(body);
+    activitiesList.innerHTML = "";
+    activitiesList.appendChild(calView);
   }
 
   // Function to render a single activity card
