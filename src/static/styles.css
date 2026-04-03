@@ -32,6 +32,21 @@
   --info-light: #d1ecf1;
 }
 
+/* Dark mode color overrides */
+body.dark-mode {
+  --background: #1a1a2e;
+  --surface: #16213e;
+  --text-primary: #e0e0e0;
+  --text-secondary: #a0a0b0;
+  --border: #2e3a5a;
+  --border-light: #253050;
+  --border-focus: #3a4a70;
+  --success-light: #1b3a1d;
+  --warning-light: #3a2e00;
+  --error-light: #3a1010;
+  --info-light: #0a2a30;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -656,11 +671,46 @@ footer {
   }
 }
 
+/* Search input dark mode */
+body.dark-mode .search-box input {
+  background-color: var(--surface);
+  color: var(--text-primary);
+}
+
+/* Activity tag dark mode */
+body.dark-mode .activity-tag[data-type="sports"] {
+  background: #1b3a1d !important;
+  color: #81c784 !important;
+}
+
+body.dark-mode .activity-tag[data-type="arts"] {
+  background: #2e1a3a !important;
+  color: #ce93d8 !important;
+}
+
+body.dark-mode .activity-tag[data-type="academic"] {
+  background: #0d2540 !important;
+  color: #64b5f6 !important;
+}
+
+body.dark-mode .activity-tag[data-type="community"] {
+  background: #2e1a00 !important;
+  color: #ffb74d !important;
+}
+
+body.dark-mode .activity-tag[data-type="technology"] {
+  background: #1e2a5a !important;
+  color: #7986cb !important;
+}
+
 /* User controls in header */
 #user-controls {
   position: absolute;
   top: 10px;
   right: 15px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 #user-status {
